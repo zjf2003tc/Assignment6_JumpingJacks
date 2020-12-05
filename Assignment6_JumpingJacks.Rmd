@@ -1,0 +1,165 @@
+---
+title: "Assignment6_JumpingJacks"
+output: html_document
+---
+
+Yingxin Ye |yy2649
+
+# Task I
+You will be working in groups on a quantified student project
+Download the Sensor Kinetics Pro app to your iOS or Android device (or similar gyroscope measuring app)
+Split into subgroups with each subgroup investigating one measures available in the app
+Each subgroup should report back after 20min with what they have learned
+
+# Task II
+1. In consultation with your group select a physical activity that: a) can be measured using the app, b) has a concrrete, sontinuous, countable outcome and c) some members of the group are experts and some are novices at - If you are looking for inspiration you can find previous student projects below.
+
+Describe our project: 
+The physical activity we choose was jumping jacks. We measured how many Jumping Jacks we did in 30s during the Hackathon on December 2nd, 2020. While we performing jumping jacks, we held a cell phone with our right hand to record the movement data. We self reported how often do we do jumping jacks at a 1-5 scale, this can be used to differentiate novice and expert in the group.  
+
+**Maybe we can use Q2 in the survey to define novices and experts??
+
+2. Collect measurements for all members of the group performing the task using the app
+
+In this project, we used the App "Physics Toolbox Sensor Suite". We used the gyroscope function in the app to record position change while we were performing jumping jacks in 30s. 
+
+3. Create a Github repo where you can store and share your data
+https://github.com/zjf2003tc/Assignment6_JumpingJacks
+
+4. Using K-means, can you identify the novices from the experts using only the app data?
+
+To perform cluster analysis, we transferred the raw data to the distance differences/sum of total distance for each participant. 
+The results doesn't seem like match with Q2
+
+5. Visualize your results using ggplot2
+
+# Set up
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(GGally)
+
+#import data
+DFge<-read.csv("sensor_Ge.csv")
+DFlee<-read.csv("sensor_lee.csv")
+DFye<-read.csv("sensor_ye.csv")
+DFzhang<-read.csv("sensor_Zhang.csv")
+DFfriedman<-read.csv("sensor_friedman.csv")
+DFzhao<-read.csv("sensor_zhao.csv")
+DFdanny<-read.csv("sensor_Danny.csv")
+DFsang<-read.csv("sensor_Sang.csv")
+```
+
+# Merging data
+```{r}
+DFge$name<-c("ge")
+DFlee$name<-c("lee")
+DFye$name<-c("ye")
+DFzhang$name<-c("zhang")
+DFfriedman$name<-c("friedman")
+DFzhao$name<-c("zhao")
+DFdanny$name<-c("danny")
+DFsang$name<-c("sang")
+
+colnames(DFlee)<-c("time","wx","wy","wz","name" )
+DF <- rbind(DFge, DFlee,DFye,DFzhang,DFfriedman,DFzhao,DFdanny,DFsang)
+DF$wx<-abs(DF$wx)
+DF$wy<-abs(DF$wy)
+DF$wz<-abs(DF$wz)
+
+dd<-DF %>% group_by(name) %>% summarise(diffx=max(wx)-min(wx),diffy=max(wy)-min(wy),diffz=max(wz)-min(wz))
+ds<-DF %>% group_by(name) %>% summarise(sumx=sum(wx),sumy=sum(wy),sumz=sum(wz))
+```
+
+# Clustering
+```{r}
+dd1<-data.frame(dd)
+dd2 <- dd1[,2:4]
+dd3<-scale(dd2, center = TRUE, scale = TRUE)
+fitdd <- kmeans(dd3,2)
+dd4<-data.frame(dd1,fitdd$cluster)
+
+ds1<-data.frame(ds)
+ds1<-ds1[-4,]#lee is an outlier, probably due to unit difference
+ds2 <- ds1[,2:4]
+ds3<-scale(ds2, center = TRUE, scale = TRUE)
+fitds <- kmeans(ds3,2)
+ds4<-data.frame(ds1,fitds$cluster)
+```
+
+# Cluster visualization
+```{r}
+number30s<-read.csv("Jumping_Jacks_in_30s.csv")
+sr<-read.csv("SurveyResponse.csv")
+dd5<-merge(dd4,number30s,by=c("name"))
+dd5<-merge(dd5,sr,by=c("name"))
+ds5<-merge(ds4,number30s,by=c("name"))
+ds5<-merge(ds5,sr,by=c("name"))
+
+#numbers in 30s by how often perform jumping jacks
+qplot(Q2,numbers_in_30s,col=as.factor(fitdd.cluster),data=dd5)
+qplot(Q2,numbers_in_30s,col=as.factor(fitds.cluster),data=ds5)
+
+```
+# Task III
+1. Devise five questions on a five point Likert scale that ask members of your group about their experience with your chosen task
+Collect data from all members of your group
+
+Q1.I consider myself physically fit.
+Q2.I regularly do jumping jacks.
+Q3.I eat a nutritious and balanced diet.
+Q4.I performed at my average ability during the test.
+Q5.I have good jumping jack technique/form
+
+2. Run a PCA analysis on the data
+
+3. What does PC1 represent in your analysis?
+
+Based on the loadings output, it seems like PC1 represent Q1, Q2 and Q5, which are more related to ability to perform jumping jacks rather than status of body at the moment of performing jumping jacks. 
+
+4. Visualize the PC1 results for each member of your group
+?? not sure
+
+PCA
+```{r}
+sr1<-na.omit(sr) #Danny didn't fill out the survey
+sr2<-sr1[,-1]
+
+pca <- prcomp(sr2, scale. = TRUE)
+summary(pca)
+plot(pca, type = "lines")
+
+loadings <- abs(pca$rotation)
+loadings
+
+pca$x
+pcax<-pca$x
+name=c("friedman","zhang","ge","ye","zhao","lee", "sang")
+pcax<-data.frame(pcax,name=name)
+
+#merging distance difference data with other data 
+dd6<-merge(sr1,pcax,by=c("name"))
+dd6<-merge(dd6,dd5[-1,],by=c("name"))
+
+qplot(PC1,numbers_in_30s,col=as.factor(name),data=dd6)
+```
+
+
+## Task IV
+1. If you could only choose one thing to predict the score for each member of your group (raw data variable, a cluster or a PC) what would it be and why?
+
+Based on the correlation graph, both PC1 and Q5 have a high correlation with number of jumping jacks in 30s, so PC1 (Q1,Q2,Q5) could  be a good predictor, especially Q5. How good do we feel about our techniques would predict how well do we perform jumping jacks in this case.  
+
+2. Create a visualization that supports your conclusion
+
+3. Based on your conclusion devise an intervention that would help novice members of your group improve their performance
+
+Practice more regularly 
+
+# Prediction
+```{r}
+ggcorr(dd6, method = c("everything", "pearson"))
+```
+
+
