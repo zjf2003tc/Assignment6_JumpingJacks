@@ -1,0 +1,292 @@
+---
+title: "Assignment6_Zach_RMD"
+author: "Zach Friedman"
+date: "12/5/2020"
+output: 
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+*Task I*
+
+You will be working in groups on a quantified student project
+Download the Sensor Kinetics Pro app to your iOS or Android device (or similar gyroscope measuring app)
+Split into subgroups with each subgroup investigating one measures available in the app
+Each subgroup should report back after 20min with what they have learned
+
+*Task II*
+
+1. In consultation with your group select a physical activity that: a) can be measured using the app, b) has a concrete, continuous, countable outcome and c) some members of the group are experts and some are novices at - If you are looking for inspiration you can find previous student projects below.
+
+Describe our project: 
+
+**The physical activity we choose was jumping jacks. We measured how many Jumping Jacks we did in 30 seconds during the Hackathon on December 2nd, 2020. While we did jumping jacks, we held a cell phone in our right hand to record the movement data.**
+
+2. Collect measurements for all members of the group performing the task using the app
+
+**In this project, we used the App "Physics Toolbox Sensor Suite". We used the ______ function in the app to record position change while we were performing jumping jacks in 30 seconds.**
+
+3. Create a Github repo where you can store and share your data
+
+https://github.com/zjf2003tc/Assignment6_JumpingJacks
+
+
+```{r}
+# reading in files and packages
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(GGally)
+library(formattable)
+
+#import data
+DFge<-read.csv("sensor_Ge.csv")
+DFlee<-read.csv("sensor_lee.csv")
+DFye<-read.csv("sensor_ye.csv")
+DFzhang<-read.csv("sensor_Zhang.csv")
+DFfriedman<-read.csv("sensor_friedman.csv")
+DFzhao<-read.csv("sensor_zhao.csv")
+DFdanny<-read.csv("Danny sensor.csv") 
+DFsang<-read.csv("sensor_Sang.csv")
+
+
+
+```
+
+## Merging and Cleaning data
+
+```{r}
+# scrubbing Sang's data because she used a different app.
+
+DFsang <- DFsang %>% separate(Date.Timestamp.DeviceOrientation.GyroscopeX.GyroscopeY.GyroscopeZ.Label,c("Date","Date2","Date3","Date4","Date5","Date6","Timestamp","Timestamp2","DeviceOrientation","GyroscopeX","GyroscopeX2","GyroscopeY","GyroscopeY2","GyroscopeZ","GyroscopeZ2","Label",sep = ";")) %>% .[,-c(1:6,16:18)] %>% unite("time",c(Timestamp,Timestamp2),sep = ".") %>% unite("wx",c(GyroscopeX,GyroscopeX2),sep = ".")%>% unite("wy",c(GyroscopeY,GyroscopeY2),sep = ".")%>% unite("wz",c(GyroscopeZ,GyroscopeZ2),sep = ".") %>% .[,-2]
+DFsang[,1:4] <- DFsang[,1:4] %>% mutate_all(as.double)
+DFsang <- DFsang %>% mutate(time = time - 1606876533)
+```
+
+```{r}
+# scrubbing Lee's data because he had 4 times as many measurements over the 30 second period
+DFlee <- DFlee %>% filter(between(time,1,31)) %>%  .[seq(1, nrow(DFlee), 4), ]
+```
+
+```{r}
+# merging CSVs into one file and removing Sang's and Danny's data because it was too irregular
+
+DFge$name<-c("ge")
+DFlee$name<-c("lee")
+DFye$name<-c("ye")
+DFzhang$name<-c("zhang")
+DFfriedman$name<-c("friedman")
+DFzhao$name<-c("zhao")
+DFdanny$name<-c("danny")
+DFsang$name<-c("sang")
+
+colnames(DFlee)<-c("time","wx","wy","wz","name" )
+DF <- rbind(DFge, DFlee,DFye,DFzhang,DFfriedman,DFzhao,DFdanny,DFsang)
+DF <- DF %>% filter(name != "sang" & name!= "danny")
+DF <- DF %>% filter(between(time,1,31))
+```
+
+
+```{r}
+# Create several new variables in all three dimensions: standard deviation, range, and average position
+
+DF1 <- DF %>% group_by(name) %>% summarize(max.x = max(wx),min.x = min(wx),average.x = mean(wx),sd.x = sd(wx),max.y = max(wy),min.y = min(wy),average.y = mean(wy),sd.y = sd(wy),max.z = max(wz),min.z = min(wz),average.z = mean(wz),sd.z = sd(wz)) %>% mutate(range.x = max.x-min.x,range.y = max.y-min.y,range.z = max.z-min.z) %>% select(-c(max.x,min.x,max.y,min.y,max.z,min.z))
+
+# Create new variables in all three dimensions: total change in position
+
+DF.new <- DF %>% group_by(name) %>% mutate(diff.x = abs(lead(wx)-wx),diff.y = abs(lead(wy)-wy),diff.z = abs(lead(wz)-wz)) %>% summarize(sum.diff.x = sum(diff.x,na.rm = T),sum.diff.y = sum(diff.y,na.rm = T),sum.diff.z = sum(diff.z,na.rm = T)) %>% left_join(DF1,by = "name")
+
+# DF %>% group_by(name) %>% count
+
+DF.new %>% mutate_at(vars(-name), funs(round(., 2))) %>% formattable()
+```
+
+#### Data table with all of the engineered features of position data
+
+
+```{r}
+# use correlation function to find the 10 most highly correlated pairs of variables
+
+df <- DF.new[,-1]
+corr_simple <- function(data=df,sig=0.3){
+  #convert data to numeric in order to run correlations
+  #convert to factor first to keep the integrity of the data - each value will become a number rather than turn into NA
+  df_cor <- data %>% mutate_if(is.character, as.factor)
+  df_cor <- df_cor %>% mutate_if(is.factor, as.numeric)
+  #run a correlation and drop the insignificant ones
+  corr <- cor(df_cor)
+  #prepare to drop duplicates and correlations of 1     
+  corr[lower.tri(corr,diag=TRUE)] <- NA
+  #drop perfect correlations
+  corr[corr == 1] <- NA
+  #turn into a 3-column table
+  corr <- as.data.frame(as.table(corr))
+  #remove the NA values from above 
+  corr <- na.omit(corr) 
+  #select significant values  
+  corr <- subset(corr, abs(Freq) > sig) 
+  #sort by highest correlation
+  corr <- corr[order(-abs(corr$Freq)),] 
+  #print table
+  corr %>% head(1000) 
+}
+corr_simple() %>% head(10)%>% mutate_at(vars(-Var1,-Var2), funs(round(., 2))) %>% formattable()
+```
+
+#### The 10 most highly correlated pairs of variables are listed above. Standard Deviation, range, and sum of positions seem to be highly correlated in all of the dimensions.
+
+## Kmeans Using Position Data
+
+```{r}
+dd1<-data.frame(DF.new)
+dd1 <- data.frame(DF.new %>% select(-average.x,average.y,average.z))
+dd2 <- dd1[,-1]
+dd3<-scale(dd2, center = TRUE, scale = TRUE)
+fitdd <- kmeans(dd3,2)
+dd4<-data.frame(dd1,fitdd$cluster)
+dd4 %>% select(name,fitdd.cluster) %>% formattable()
+
+```
+
+#### Clustering results using engineered features from position data
+
+### Cluster visualization
+
+```{r}
+number30s<-read.csv("Jumping_Jacks_in_30s.csv")
+names(number30s) <- c("name","jumping_jacks")
+
+sr<-read.csv("SurveyResponse.csv")
+names(sr)[1] <- "name"
+
+dd5<-merge(dd4,number30s,by=c("name"))
+
+dd5<-merge(dd5,sr,by=c("name"))
+
+#numbers in 30s by how often perform jumping jacks
+# qplot(Q2,jumping_jacks,col=as.factor(fitdd.cluster),data=dd5)
+
+# DF.new %>% left_join(number30s,by = "name") %>% arrange(-jumping_jacks) %>% select(name,jumping_jacks,everything())
+
+dd5 %>% select(name, jumping_jacks, fitdd.cluster, everything()) %>% arrange(-jumping_jacks) %>% mutate_at(vars(-name), funs(round(., 2))) %>% formattable()
+```
+
+#### Table with all of the variables integrated. _____ relationship of jumping jacks and cluster assignment.
+
+4. Using K-means, can you identify the novices from the experts using only the app data?
+
+To perform cluster analysis, we transferred the raw data to the distance differences/sum of total distance for each participant. 
+
+**FILL IN INFO HERE**
+
+5. Visualize your results using ggplot2
+
+**FILL IN INFO HERE**
+
+## PCA: Predicting Using Survey Data
+
+**Task III**
+
+1. Devise five questions on a five point Likert scale that ask members of your group about their experience with your chosen task
+Collect data from all members of your group
+
+**We  surveyed our group members and asked ourselves various questions related to our experience with jumping jacks and overall physical fitness. These were developed with the aim of differentiating novices and experts in the group.** 
+
+**Q1.I consider myself physically fit.**
+**Q2.I regularly do jumping jacks.**
+**Q3.I eat a nutritious and balanced diet.**
+**Q4.I performed at my average ability during the test.**
+**Q5.I have good jumping jack technique/form**
+
+2. Run a PCA analysis on the data
+
+### PCA on Survey Data
+
+```{r}
+sr1 <- na.omit(sr) #Danny didn't fill out the survey
+sr2 <- sr1[,-1]
+
+pca <- prcomp(sr2, scale. = TRUE)
+plot(pca, type = "lines")
+
+loadings <- abs(pca$rotation)
+loadings %>% formattable()
+```
+
+3. What does PC1 represent in your analysis?
+
+**Based on the loadings output, it seems like PC1 represent Q1, Q2 and Q5, which are more related to ability to perform jumping jacks rather than status of body at the moment of performing jumping jacks.**
+
+
+```{R}
+pcax <- pca$x
+name <- sr1[,1]
+pcax <- data.frame(pcax,name)
+#merging distance difference data with other data 
+
+dd6 <- dd5 %>% left_join(pcax,by=c("name")) %>% select(-fitdd.cluster)
+# dd6<- dd6 %>% left_join(dd5,by=c("name"))
+
+# qplot(PC1,jumping_jacks,col=as.factor(name),data=dd6)
+dat.plot <- pcax %>% left_join(number30s,by = "name")
+dat.plot %>% ggplot + geom_point(mapping = aes(x = PC1, y = jumping_jacks,color = name,size = 10)) + labs(y = "Jumping Jacks in 30 Seconds", title = "PC1 vs. Jumping Jacks by Person")
+```
+
+4. Visualize the PC1 results for each member of your group
+
+**The PC1 results show a very clear negative linear relationship between PC1 and the group members' performance on the jumping jacks task.**
+
+## Conclusions and Prescriptions
+
+
+### Conclusions
+
+**Task IV**
+
+1. If you could only choose one thing to predict the score for each member of your group (raw data variable, a cluster or a PC) what would it be and why?
+
+**Based on the correlation graph, both PC1 and Q5, Q4, and Q1 have a high correlation with number of jumping jacks in 30s, so PC1 (Q1,Q2,Q5) could  be a good predictor, especially Q5. **
+
+2. Create a visualization that supports your conclusion
+
+### Prescriptive Analytics
+
+```{r}
+ggcorr(dd6, method = c("everything", "pearson"))
+
+```
+
+
+```{r}
+df <- dd6[,-1]
+test <- corr_simple()
+test %>% filter(Var1=="jumping_jacks"|Var2=="jumping_jacks") %>% mutate_at(vars(-Var1,-Var2), funs(round(., 2))) %>% formattable()
+
+# Q5 PC1 Q4 Q1
+```
+
+#### These 7 variables were most highly correlated with jumping jacks
+
+
+3. Based on your conclusion devise an intervention that would help novice members of your group improve their performance
+
+**Besides practicing more regularly of course, we recommend several interventions related to technique.**
+
+**FILL IN INFO HERE**
+
+
+```{r}
+# ds1<-data.frame(ds)
+# ds1<-ds1[-4,]#lee is an outlier, probably due to unit difference
+# ds2 <- ds1[,2:4]
+# ds3<-scale(ds2, center = TRUE, scale = TRUE)
+# fitds <- kmeans(ds3,2)
+# ds4<-data.frame(ds1,fitds$cluster)
+```
+
