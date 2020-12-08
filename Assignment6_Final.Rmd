@@ -46,7 +46,7 @@ library(tidyr)
 library(ggplot2)
 library(GGally)
 library(formattable)
-
+library(forcats)
 #import data
 DFge<-read.csv("sensor_Ge.csv")
 DFlee<-read.csv("sensor_lee.csv")
@@ -96,6 +96,16 @@ DF <- DF %>% filter(between(time,1,31))
 
 #### Below is the data table with all the engineered features of position data. "sum.diff.(x,y,z)" was calculated by taking the sum of the absolute value of the difference between the lead row (one measurement ahead) and the current row. Thus, it represents the total change in gyroscope vectors for each position. The other features are standard statistical measures.
 
+#### It is difficult to definitively interpret the meaning of each variable, but these are some conclusions we reached.
+
+#### Average refers to the average position the phone was in. The average position should be the neutral state which would result in an average of 0. Most people's position averages were indeed close to 0. However, through testing we observed that slight variations in the positions of one's wrist throughout the movement could influence the average and we discuss this in greater detail when suggesting interventions.  
+
+#### Standard Deviation refers to the average variation from the mean (around 0 for most people), thus the jumping jack recordings with the most extreme peaks and troughs should result in the largest standard deviations. This may be due to a combination of how quickly someone moved their arms, the stability of the phone in one's hand, the height of someone's jumps, and the specific form used (more discussion will be offered later).
+
+#### Range was calculated using the max minus the min (the highest peak and the lowest trough) and thus is likely a very similar measure to standard deviation.
+
+#### Sum.diff measures the total change in position throughout the 30 seconds of recording. We think the number of jumping jacks plus the range of rotation result in the largest swings in sum.diff.
+
 ```{r}
 # Create several new variables in all three dimensions: standard deviation, range, and average position
 
@@ -144,6 +154,12 @@ corr_simple() %>% head(10)%>% mutate_at(vars(-Var1,-Var2), funs(round(., 3))) %>
 
 ```
 
+
+```{r}
+DF.new <- DF.new %>% select(-sd.x,-sd.y,-sd.z,-sum.diff.x,-sum.diff.y,-sum.diff.z)
+```
+
+#### Standard deviation and sum.diff were dropped from the kmeans model because they seemed to be highly correlated with range.
 
 
 ## Kmeans Using Position Data
@@ -198,11 +214,13 @@ dd5 %>% select(name, jumping_jacks, fitdd.cluster) %>% arrange(-jumping_jacks) %
 dd5 %>% mutate(Cluster = as.factor(fitdd.cluster)) %>% ggplot + geom_jitter(mapping = aes(x= range.z,y = jumping_jacks,color = Cluster)) + labs(x = "Range of Position in the Z Direction", y = "Number of Jumping Jacks in 30 Seconds", title = "Clusters Visualized on Range.Z vs. Number of Jumping Jacks")
 ```
 
-#### Above is a visualization of the relationship between range.z and number of jumping jacks. When replacing range.z with range.x, the graph looked very similar. Clearly, the clusters are a decent indicator of the x-axis, the raw gyroscope data.  However, the clusters do not show a clear relationship to the y-axis, the jumping jacks. Thus, this attempt at kMeans failed to provide strong predictive power for jumping jack ability. There are a couple potential reasons for this finding: 
+#### Above is a visualization of the relationship between range.z and number of jumping jacks. When replacing range.z with range.x, the graph looked very similar. Clearly, the clusters are a decent indicator of the x-axis, the raw gyroscope data.  However, the clusters do not show a clear relationship to the y-axis, the jumping jacks. Thus, this attempt at kMeans failed to provide strong predictive power for jumping jack ability. There are a few potential reasons for this finding: 
 
 **(1) The gyrsocope data did not accurately or consistently gauge important aspects of performing jacks quickly. Two of the dimensions, x and z, measured movements that were unrelated to the position of one's hand during a jumping jack. During a jumping jack, one does not bend their wrist up and down or shake their wrist, as in waving their hand. The y-dimension is an exception and will be discussed later. One other caveat to the unrelatedness of the gyroscope data is that the three vectors do spike in unison when one's hand quickly accelerates or decelerates, likely because the gyroscope is under so much angular force. So, it is still somewhat surprising that kMeans proved ineffective when using statistical measures of these three variables in the model.**
 
-**(2) There are not enough data to identify experts based on this clustering method; there were only seven participants.**
+**(2) The gyroscope data is affected by the orientation in which each group member was holding their phone. Holding the phone upright or flat in their hand could have affected some of the results.**
+
+**(3) There are not enough data to identify experts based on this clustering method; there were only seven participants.**
 
 
 ## PCA: Predicting Using Survey Data
@@ -257,7 +275,8 @@ dd6 <- dd5 %>% left_join(pcax,by=c("name"))
 
 # qplot(PC1,jumping_jacks,col=as.factor(name),data=dd6)
 dat.plot <- pcax %>% left_join(number30s,by = "name")
-dat.plot %>% ggplot + geom_point(mapping = aes(x = PC1, y = jumping_jacks,color = name,size = 10)) + labs(y = "Jumping Jacks in 30 Seconds", title = "PC1 vs. Jumping Jacks by Person")
+dat.plot$name <- fct_reorder(dat.plot$name, dat.plot$PC1)
+dat.plot %>% ggplot + geom_col(mapping = aes(x = name, y = PC1,fill=name)) + labs(x = "Name", y = "PC1", title = "PC1 vs. Jumping Jacks by Person")
 ```
 
 
@@ -316,7 +335,7 @@ knitr::include_graphics("Expert_Form.jpg")
 dd6 %>% mutate(`PC1 Cutoff` = factor(ifelse(PC1>0,"Greater than 0", "Less than 0"),levels = c("Less than 0","Greater than 0"))) %>% ggplot + geom_boxplot(mapping = aes(x = `PC1 Cutoff`, y = jumping_jacks,fill =`PC1 Cutoff` )) + labs(x = "PC1 (Survey Data)", y = "Jumping Jacks in 30 Seconds", title = "PC1 (Survey Data) vs. Jumping Jacks in 30 Seconds")
 ```
 
-#### The sign of PC1 is not easily intepretable; however, it was used as a cutoff to create a boxplot visualization. For example, if an individual's PC1 value was -1, they would be placed in the "Less than 0" category. The graph indicates that PC1 is an excellent predictor of the y-axis variable, jumping jacks, with only a single overlapping individual in the "Greater than 0" category.
+#### The sign of PC1 is not easily intepretable; however, it was used as a cutoff to create a boxplot visualization. For example, if an individual's PC1 value was -1, they would be placed in the "Less than 0" category. The graph indicates that PC1 is an excellent predictor of the y-axis variable, jumping jacks, with only a single overlapping individual in the "Greater than 0" category. The median numbr of jumping jacks was 10 points higher for the less than 0 PC1 group than for the greater than 0 PC1 group.
 
 
 ### Prescriptive Analytics
