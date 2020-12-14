@@ -159,7 +159,7 @@ corr_simple() %>% head(10)%>% mutate_at(vars(-Var1,-Var2), funs(round(., 3))) %>
 DF.new <- DF.new %>% select(-sd.x,-sd.y,-sd.z,-sum.diff.x,-sum.diff.y,-sum.diff.z)
 ```
 
-#### Standard deviation and sum.diff were dropped from the kmeans model because they seemed to be highly correlated with range.
+#### Standard deviation and sum.diff were dropped from the kmeans model because they seemed to be highly correlated with range. We left range and average of all three dimensions for the KMeans analysis.
 
 
 ## Kmeans Using Position Data
@@ -201,7 +201,7 @@ dd5 %>% select(name, jumping_jacks, fitdd.cluster) %>% arrange(-jumping_jacks) %
 
 *4. Using K-means, can you identify the novices from the experts using only the app data?*
 
-**The resulting clusters grouped danny, zhao, and ye in one group, although danny and zhao had the second and third most jumping jacks, respectively, ye had the fewest. Thus, the clusters do not seem to be able to distinguish the novices from the experts.**
+**We defined experts as having done 40 or more jumping jacks in 30 seconds. The resulting clusters grouped danny, zhao, and ye in one group, although danny and zhao were in the expert category, ye had the fewest jumping jacks. Thus, the clusters do not seem to be able to reliably distinguish the novices from the experts.**
 
 ### Cluster visualization
 
@@ -259,7 +259,7 @@ loadings
 ```
 
 
-**Based on the loadings output, it seems like Q1, Q2 and Q5 primarily make up PC1. These questions are related to physical fitness, jumping jack practice, and technique. Self-reported performance and nutrition did not contribute as much to PC1.**
+**Based on the loadings output, it seems like Q1, Q2 and Q5 primarily make up PC1. These questions are related to physical fitness, jumping jack practice, and technique. Thus, in general PC1 is related to jumping jack ability. Self-reported performance and nutrition did not contribute as much to PC1.**
 
 
 *4. Visualize the PC1 results for each member of your group*
@@ -276,7 +276,7 @@ dd6 <- dd5 %>% left_join(pcax,by=c("name"))
 # qplot(PC1,jumping_jacks,col=as.factor(name),data=dd6)
 dat.plot <- pcax %>% left_join(number30s,by = "name")
 dat.plot$name <- fct_reorder(dat.plot$name, dat.plot$PC1)
-dat.plot %>% ggplot + geom_col(mapping = aes(x = name, y = PC1,fill=name)) + labs(x = "Name", y = "PC1", title = "PC1 vs. Jumping Jacks by Person")
+dat.plot %>% ggplot + geom_col(mapping = aes(x = name, y = PC1),fill="blue") + labs(x = "Name", y = "PC1", title = "PC1 vs. Jumping Jacks by Person")
 ```
 
 
@@ -332,10 +332,10 @@ knitr::include_graphics("Expert_Form.jpg")
 
 
 ```{r}
-dd6 %>% mutate(`PC1 Cutoff` = factor(ifelse(PC1>0,"Greater than 0", "Less than 0"),levels = c("Less than 0","Greater than 0"))) %>% ggplot + geom_boxplot(mapping = aes(x = `PC1 Cutoff`, y = jumping_jacks,fill =`PC1 Cutoff` )) + labs(x = "PC1 (Survey Data)", y = "Jumping Jacks in 30 Seconds", title = "PC1 (Survey Data) vs. Jumping Jacks in 30 Seconds")
+dd6 %>% mutate(`PC1 Cutoff` = factor(ifelse(PC1>0,"Less than Average Ability", "Greater than Average Ability"),levels = c("Less than Average Ability","Greater than Average Ability"))) %>% ggplot + geom_boxplot(mapping = aes(x = `PC1 Cutoff`, y = jumping_jacks,fill =`PC1 Cutoff` )) + labs(x = "PC1 (Survey Data)", y = "Jumping Jacks in 30 Seconds", title = "PC1 (Survey Data) vs. Jumping Jacks in 30 Seconds")
 ```
 
-#### The sign of PC1 is not easily intepretable; however, it was used as a cutoff to create a boxplot visualization. For example, if an individual's PC1 value was -1, they would be placed in the "Less than 0" category. The graph indicates that PC1 is an excellent predictor of the y-axis variable, jumping jacks, with only a single overlapping individual in the "Greater than 0" category. The median numbr of jumping jacks was 10 points higher for the less than 0 PC1 group than for the greater than 0 PC1 group.
+#### Two categories were created based on PC1 scores of each individual. One group of participants were put in the greater than average jumping jack ability group for a lower PC1 number and the other group of participants were put in the lower than average jumping jack ability group. The graph indicates that PC1 is an excellent predictor of the y-axis variable, jumping jacks, with only a single overlapping individual in the "Less than Average Ability" category. The median numbr of jumping jacks was 10 points higher for greater than average ability group than for the less than average ability group.
 
 
 ### Prescriptive Analytics
@@ -346,11 +346,11 @@ dd6 %>% mutate(`PC1 Cutoff` = factor(ifelse(PC1>0,"Greater than 0", "Less than 0
 
 #### Thus we recommend the following interventions to improve jumping jack speed:
 
-##### 1) Practice jumping jacks more often while focusing on reducing the rotation of your wrists employing the "Expert Form" above.
+##### 1) Practice jumping jacks more often while focusing on reducing the rotation of your wrists employing the "Expert Form" above. This may help them move into the 40+ jumping jack expert group. 
 
 ##### 2) Increase physical fitness through consistent cardiovascular exercise.
 
-##### 3) When doing the 30 second test again, be committed to push physical limits and intently focus on the challenge to ensure self-relative performance is at least average, but ideally high.
+##### 3) When doing the 30 second test again, be committed to push physical limits and intently focus on the challenge to ensure self-relative performance is at least average, but ideally high. This was this evidenced by the positive correlation between jumping jacks and respondents' answers to their self-reported performance.
 
 
 ```{r}
